@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BotHost</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--tx:#e6e8ee;--mu:#8a90a0;--ac:#5b8cff;--ok:#3ecf8e;--er:#ff5d5d}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:14px;max-width:760px;margin:auto}
+h1{font-size:20px}.card{background:var(--card);border-radius:12px;padding:14px;margin:12px 0}
+input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #2a2f3a;background:#0f1115;color:var(--tx);margin:6px 0}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:9px 13px;margin:3px 3px 3px 0;font-size:14px}
+button.g{background:#2a2f3a}button.r{background:var(--er)}button.s{background:var(--ok);color:#000}
+.row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--mu)}.dot.on{background:var(--ok)}
+pre{background:#0a0c10;padding:10px;border-radius:8px;max-height:240px;overflow:auto;font-size:12px;white-space:pre-wrap;color:#b8f0d0}
+small{color:var(--mu)}
+</style></head><body>
+<h1>🤖 BotHost</h1>
+<div class="card" id="login"><input id="pw" type="password" placeholder="Admin password"><button onclick="login()">Login</button></div>
+<div id="app" style="display:none">
+  <div class="card"><b>New bot</b>
+    <input id="nn" placeholder="bot-name (letters, numbers, - _)">
+    <input id="nf" type="file" multiple>
+    <button onclick="create()">Upload / Create</button>
+    <small>Upload a .js (Node) or .py (Python) file. First .js/.py becomes the entry point.</small></div>
+  <div id="list"></div>
+</div>
+<script>
+let KEY=localStorage.getItem('k')||'';
+const H=()=>({'x-auth':KEY,'Content-Type':'application/json'});
+async function call(p,m='GET',b){const r=await fetch('/api'+p,{method:m,headers:H(),body:b?JSON.stringify(b):undefined});if(r.status===401){logout();throw 0}return r.json()}
+function login(){KEY=document.getElementById('pw').value;localStorage.setItem('k',KEY);init()}
+function logout(){localStorage.removeItem('k');document.getElementById('app').style.display='none';document.getElementById('login').style.display='block'}
+async function init(){try{await call('/bots')}catch{return}
+ document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';load()}
+async function create(){const n=nn.value.trim(),f=nf.files;if(!n||!f.length)return alert('Name and file required');
+ const fd=new FormData();for(const x of f)fd.append('files',x);
+ await fetch('/api/bots/'+n+'/upload',{method:'POST',headers:{'x-auth':KEY},body:fd});nf.value='';load()}
+async function act(n,a){await call(`/bots/${n}/${a}`,'POST');setTimeout(load,1200)}
+async function del(n){if(confirm('Delete '+n+'?')){await call('/bots/'+n,'DELETE');setTimeout(load,700)}}
+async function env(n){const cur=await call(`/bots/${n}/env`);
+ const t=prompt('Env vars, one KEY=VALUE per line',Object.entries(cur).map(([k,v])=>k+'='+v).join('\n'));
+ if(t===null)return;const o={};t.split('\n').forEach(l=>{const i=l.indexOf('=');if(i>0)o[l.slice(0,i).trim()]=l.slice(i+1).trim()});
+ await call(`/bots/${n}/env`,'POST',{env:o})}
+async function load(){const bots=await call('/bots');const el=document.getElementById('list');
+ el.innerHTML=bots.map(b=>`<div class="card"><div class="row"><b><span class="dot ${b.running?'on':''}"></span>${b.name}</b><small>${b.entry||'no entry'}</small></div>
+ <div><button class="s" onclick="act('${b.name}','start')">Start</button><button class="g" onclick="act('${b.name}','restart')">Restart</button><button class="g" onclick="act('${b.name}','stop')">Stop</button><button class="g" onclick="env('${b.name}')">Env</button><button class="r" onclick="del('${b.name}')">Delete</button></div>
+ <pre id="log-${b.name}">...</pre></div>`).join('');
+ bots.forEach(async b=>{const l=await call(`/bots/${b.name}/logs`);const p=document.getElementById('log-'+b.name);if(p){p.textContent=l.join('\n')||'(no logs)';p.scrollTop=p.scrollHeight}})}
+setInterval(()=>{if(KEY&&document.getElementById('app').style.display!=='none')load()},4000);
+init();
+</script></body></html>
